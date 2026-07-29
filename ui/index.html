@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>axona.portal</title>
+<link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>axona<span>.portal</span></h1>
+    <div class="status" id="status" title="mesh status">
+      <span class="dot" id="dot"></span><span id="statusText">starting…</span>
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Topics</h2>
+      <span class="hint">A topic is a shared address. Anyone with its ID can read what you send.</span>
+    </div>
+    <form id="addForm" autocomplete="off">
+      <input id="topicInput" type="text" placeholder="a name like design-team, or a 66-character topic ID"
+             maxlength="96" spellcheck="false" aria-label="topic name or ID">
+      <button type="submit">Add</button>
+    </form>
+    <ul id="topics" class="topics"></ul>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Send</h2>
+      <span class="hint">Up to 10&nbsp;MB per file.</span>
+    </div>
+    <div id="drop" class="drop" tabindex="0" role="button"
+         aria-label="drop a file here, or press Enter to choose one">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      <p class="drop-main">Drop a file</p>
+      <p class="drop-sub" id="dropSub">Select a topic first</p>
+      <input type="file" id="filePicker" hidden>
+    </div>
+    <div id="bar" class="bar" hidden><div id="barFill"></div></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Files</h2>
+      <button class="linky" id="revealFolder" type="button">Open folder</button>
+    </div>
+    <ul id="files" class="files"></ul>
+    <p class="empty" id="filesEmpty">Nothing yet. Received files are saved to your folder and listed here.</p>
+  </section>
+
+  <footer>
+    <span id="saveDir"></span>
+    <span id="kernel"></span>
+  </footer>
+  <div id="toast" class="toast" hidden></div>
+</main>
+<!-- The value below is substituted by the server. Its placeholder must NOT be
+     the same string as the variable name: replace() with a string pattern hits
+     only the FIRST match, which was the identifier, leaving the value untouched
+     and the socket unauthenticated — a page that loaded perfectly and simply
+     never connected. Fenced by test/smoke_token_substitution.mjs. -->
+<script>window.__TOKEN__ = "%%TOKEN%%";</script>
+<script type="module" src="/ui/app.js"></script>
+</body>
+</html>

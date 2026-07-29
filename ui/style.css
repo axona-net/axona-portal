@@ -1,0 +1,137 @@
+/* =====================================================================
+   axona.portal — one column, three panels, nothing that moves on its own.
+   Light and dark both come from the OS; there is no theme switch to get wrong.
+   ===================================================================== */
+
+:root {
+  --bg:      #fbfbfa;
+  --panel:   #ffffff;
+  --ink:     #1a1a19;
+  --ink-dim: #6b6b66;
+  --line:    #e6e4df;
+  --accent:  #2f6f4f;
+  --accent-soft: #eaf2ed;
+  --warn:    #a4522a;
+  --radius:  10px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:#151614; --panel:#1d1f1c; --ink:#eceae4; --ink-dim:#9a988f;
+    --line:#2e312c; --accent:#7fbf9a; --accent-soft:#222c26; --warn:#d9986b;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+main { max-width: 640px; margin: 0 auto; padding: 28px 20px 40px; }
+
+/* ── header ─────────────────────────────────────────────────────── */
+header { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
+h1 { font-size:19px; font-weight:600; letter-spacing:-.2px; margin:0; }
+h1 span { color: var(--ink-dim); font-weight:400; }
+.status { display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-dim); }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--ink-dim); flex:none; }
+.dot.on   { background:var(--accent); }
+.dot.off  { background:var(--warn); }
+
+/* ── panels ─────────────────────────────────────────────────────── */
+.panel {
+  background: var(--panel); border:1px solid var(--line);
+  border-radius: var(--radius); padding:16px 18px; margin-bottom:16px;
+}
+.panel-head { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:12px; }
+h2 { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:.6px; margin:0; color:var(--ink-dim); }
+.hint { font-size:12px; color:var(--ink-dim); text-align:right; }
+
+/* ── add topic ──────────────────────────────────────────────────── */
+form { display:flex; gap:8px; }
+input[type=text] {
+  flex:1; min-width:0; padding:9px 11px; font:inherit; font-size:14px;
+  color:var(--ink); background:var(--bg);
+  border:1px solid var(--line); border-radius:7px;
+}
+input[type=text]:focus { outline:2px solid var(--accent); outline-offset:-1px; border-color:transparent; }
+button {
+  font:inherit; font-size:14px; font-weight:500; padding:9px 15px; cursor:pointer;
+  color:#fff; background:var(--accent); border:none; border-radius:7px;
+}
+button:hover { filter:brightness(1.08); }
+button:active { transform:translateY(1px); }
+@media (prefers-color-scheme: dark) { button { color:#10130f; } }
+
+/* ── topic list ─────────────────────────────────────────────────── */
+.topics { list-style:none; margin:12px 0 0; padding:0; }
+.topics:empty { margin:0; }
+.topics li {
+  display:flex; align-items:center; gap:10px; padding:9px 10px;
+  border:1px solid transparent; border-radius:7px; cursor:pointer;
+}
+.topics li:hover { background:var(--bg); }
+.topics li.sel { background:var(--accent-soft); border-color:var(--accent); }
+.topics .name { font-weight:500; flex:none; }
+.topics .tid {
+  font-family:var(--mono); font-size:11px; color:var(--ink-dim);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0;
+}
+.icon {
+  flex:none; background:none; border:none; padding:4px 6px; cursor:pointer;
+  color:var(--ink-dim); font-size:13px; border-radius:5px;
+}
+.icon:hover { background:var(--line); color:var(--ink); }
+
+/* ── drop zone ──────────────────────────────────────────────────── */
+.drop {
+  border:1.5px dashed var(--line); border-radius:var(--radius);
+  padding:30px 20px; text-align:center; cursor:pointer;
+  transition: border-color .12s, background .12s;
+}
+.drop:hover, .drop:focus-visible { border-color:var(--accent); outline:none; }
+.drop.over { border-color:var(--accent); background:var(--accent-soft); }
+.drop.disabled { opacity:.5; cursor:not-allowed; }
+.drop svg { width:26px; height:26px; fill:none; stroke:var(--ink-dim); stroke-width:1.6;
+            stroke-linecap:round; stroke-linejoin:round; margin-bottom:8px; }
+.drop-main { margin:0; font-weight:500; }
+.drop-sub  { margin:3px 0 0; font-size:12.5px; color:var(--ink-dim); }
+
+.bar { height:3px; background:var(--line); border-radius:2px; margin-top:12px; overflow:hidden; }
+.bar > div { height:100%; width:0; background:var(--accent); transition:width .15s; }
+
+/* ── files ──────────────────────────────────────────────────────── */
+.files { list-style:none; margin:0; padding:0; }
+.files li {
+  display:flex; align-items:center; gap:10px; padding:9px 2px;
+  border-bottom:1px solid var(--line);
+}
+.files li:last-child { border-bottom:none; }
+.arrow { flex:none; font-size:12px; width:14px; text-align:center; color:var(--ink-dim); }
+.arrow.in { color:var(--accent); }
+.fname {
+  flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  background:none; border:none; padding:0; font:inherit; color:var(--ink); text-align:left;
+}
+.fname.click { cursor:pointer; }
+.fname.click:hover { color:var(--accent); text-decoration:underline; }
+.meta { flex:none; font-size:11.5px; color:var(--ink-dim); font-family:var(--mono); }
+.empty { font-size:13px; color:var(--ink-dim); margin:4px 0 0; }
+.linky { background:none; border:none; color:var(--ink-dim); font-size:12px; cursor:pointer; padding:0; }
+.linky:hover { color:var(--accent); text-decoration:underline; }
+
+/* ── footer + toast ─────────────────────────────────────────────── */
+footer {
+  display:flex; justify-content:space-between; gap:12px;
+  font-size:11.5px; color:var(--ink-dim); font-family:var(--mono);
+  padding:0 4px;
+}
+footer span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.toast {
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:8px;
+  font-size:13px; max-width:min(520px, 90vw); box-shadow:0 4px 16px rgba(0,0,0,.18);
+}
+.toast.warn { background:var(--warn); color:#fff; }
