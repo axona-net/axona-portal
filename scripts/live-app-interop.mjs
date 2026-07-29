@@ -20,13 +20,31 @@
 import { connect, resolveRegion, regionCenter } from '@axona/protocol';
 import { Portal } from '../src/portal.js';
 import { namespaced } from '../src/config.js';
-import {
-  sendFileBytes as agentSend, listPointers as agentList, hashBytes,
-} from '../../axona-relay/src/file-transfer.js';
 import { randomBytes } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
+// The agent half lives in a SEPARATE repository, on purpose: the whole point of
+// this test is that two independent implementations agree, and importing one
+// from the other would quietly defeat that. It also means a plain clone of this
+// repo cannot run this script, so say which repo is missing and where it goes
+// rather than emitting a bare ERR_MODULE_NOT_FOUND.
+const RELAY = '../../axona-relay/src/file-transfer.js';
+let agentSend, agentList, hashBytes;
+try {
+  ({ sendFileBytes: agentSend, listPointers: agentList, hashBytes } = await import(RELAY));
+} catch (e) {
+  if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
+  console.error(
+    `\nThis test needs the AGENT implementation, which lives in a different repo:\n\n` +
+    `    github.com/axona-net/axona-relay   (clone it next to this one)\n\n` +
+    `They are separate deliberately — the test proves two independent\n` +
+    `implementations of manifest v1 interoperate, so it must not import one\n` +
+    `from the other. For the portal-only proof, run instead:\n\n` +
+    `    node scripts/live-transfer.mjs\n`);
+  process.exit(2);
+}
 
 const BRIDGE = process.env.BRIDGE_URL || 'wss://bridge.axona.net';
 const REGION = 'eagle';

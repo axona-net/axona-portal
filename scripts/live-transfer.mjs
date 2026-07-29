@@ -5,7 +5,7 @@
 // If this passes, the property holds on the real network, not just in unit
 // tests where both sides are the same process.
 import { connect, resolveRegion, regionCenter } from '@axona/protocol';
-import { sendFile, fetchBytes, watchPointers, hashBytes } from './src/transfer/index.js';
+import { sendFile, fetchBytes, watchPointers, hashBytes } from '../src/transfer/index.js';
 import { randomBytes } from 'node:crypto';
 
 const BRIDGE = process.env.BRIDGE_URL || 'wss://bridge.axona.net';
