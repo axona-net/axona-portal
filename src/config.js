@@ -32,6 +32,26 @@ export const DEFAULTS = Object.freeze({
   port:    7777,
 });
 
+/**
+ * Every topic this app addresses BY NAME lives under `portal.`.
+ *
+ * Why a namespace rather than care: a topic name is a global address, and the
+ * obvious name for a thing is the name someone else already used. Typing
+ * "axona.bot" here derived exactly the address a chat channel uses by that
+ * name — one plausible word away from publishing a few hundred file chunks
+ * into a conversation. Nothing warned, because nothing was wrong: it is one
+ * flat namespace and both parties addressed it correctly.
+ *
+ * So the fix is structural, not advisory. `portal.axona.bot` cannot collide
+ * with `axona.bot` no matter how obvious the name looked, and the prefix is
+ * visible in the UI so the address you share is the address you see.
+ *
+ * A pasted 66-hex TOPIC ID is deliberately exempt: an id is already a resolved
+ * address, it cannot be prefixed, and typing 66 hex characters is not a slip.
+ * That remains the escape hatch for "I really do mean that exact topic".
+ */
+export const TOPIC_PREFIX = 'portal.';
+
 /** 10 MB — the app's stated limit, and close to what the protocol allows. */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -63,6 +83,23 @@ export function loadConfig() {
   cfg.topics  = Array.isArray(cfg.topics) ? cfg.topics.filter(isValidTopic) : [];
   cfg.saveDir = resolve(String(cfg.saveDir || DEFAULTS.saveDir));
   cfg.port    = Number.isInteger(cfg.port) ? cfg.port : DEFAULTS.port;
+
+  // Migrate topics saved before the namespace existed. This CHANGES the
+  // address — `axona.bot` and `portal.axona.bot` are different topics — so it
+  // is announced, never done quietly. Anyone you were sharing with needs the
+  // new id, and being told beats discovering it through silence.
+  // Topics held as a bare 66-hex id are left exactly as they are: an id is an
+  // address that was chosen deliberately and is not ours to rewrite.
+  const moved = [];
+  for (const t of cfg.topics) {
+    if (t.id || typeof t.name !== 'string') continue;
+    const next = namespaced(t.name);
+    if (next !== t.name) { moved.push(`${t.name} -> ${next}`); t.name = next; delete t.resolvedId; }
+  }
+  if (moved.length) {
+    console.warn(`[portal] topics moved under the "${TOPIC_PREFIX}" namespace: ${moved.join(', ')}`);
+    console.warn(`[portal] these are DIFFERENT topics — re-share the new ID with anyone sending to you.`);
+  }
   return cfg;
 }
 
@@ -98,5 +135,15 @@ export function parseTopicInput(raw, region) {
   if (s.length > 96) throw new Error('Topic names are limited to 96 characters.');
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f]/.test(s)) throw new Error('Topic names cannot contain control characters.');
-  return { name: s, region };
+  return { name: namespaced(s), region };
+}
+
+/**
+ * Put a name under the portal namespace, idempotently. Typing the prefix
+ * yourself must not produce `portal.portal.foo` — people paste back what the
+ * UI shows them, and the UI shows the full name.
+ */
+export function namespaced(name) {
+  const s = String(name ?? '').trim();
+  return s.startsWith(TOPIC_PREFIX) ? s : TOPIC_PREFIX + s;
 }

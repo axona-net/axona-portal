@@ -13,8 +13,9 @@
 // Run: node test/smoke_config.mjs
 // =====================================================================
 
-import { parseTopicInput, MAX_FILE_BYTES } from '../src/config.js';
+import { parseTopicInput, MAX_FILE_BYTES, TOPIC_PREFIX, namespaced } from '../src/config.js';
 import { rawChunkSize } from '@axona/protocol/std/chunk.js';
+import { deriveTopicId } from '@axona/protocol';
 
 let n = 0, fail = 0;
 const ok = (m, c, extra = '') => {
@@ -25,11 +26,37 @@ const throws = (fn) => { try { fn(); return false; } catch { return true; } };
 
 console.log('config — topic input, and why the limit is 10 MB\n');
 
-// ── 1. names ───────────────────────────────────────────────────────
+// ── 1. names live under the portal. namespace ──────────────────────
+// THE DEFECT THIS GUARDS (2026-07-28). Typing "axona.bot" derived exactly the
+// address another app uses by that name — one plausible word away from
+// publishing file chunks into someone's conversation. Nothing was broken:
+// one flat namespace, both parties addressing it correctly. The fix has to be
+// structural, so the prefix is asserted here rather than trusted.
 {
   const r = parseTopicInput('design-team', 'eagle');
-  ok('a plain name becomes { name, region }', r.name === 'design-team' && r.region === 'eagle');
-  ok('surrounding whitespace is trimmed', parseTopicInput('  spaced  ', 'eagle').name === 'spaced');
+  ok('a plain name is namespaced', r.name === 'portal.design-team', r.name);
+  ok('…and carries the region', r.region === 'eagle');
+  ok('surrounding whitespace is trimmed first',
+    parseTopicInput('  spaced  ', 'eagle').name === 'portal.spaced');
+
+  // Idempotent: the UI shows the full name and people paste back what they see.
+  ok('an already-namespaced name is not doubled',
+    parseTopicInput('portal.design-team', 'eagle').name === 'portal.design-team');
+  ok('namespaced() is idempotent', namespaced(namespaced('x')) === 'portal.x');
+  ok('the prefix constant is what is applied', TOPIC_PREFIX === 'portal.');
+}
+
+// ── 1b. the namespace actually changes the ADDRESS ─────────────────
+// A prefix that produced the same topic id would be decoration. This is the
+// assertion that makes the collision structurally impossible.
+{
+  const collided  = await deriveTopicId({ region: 'eagle', name: 'axona.bot' });
+  const namespacedId = await deriveTopicId(
+    { region: 'eagle', name: parseTopicInput('axona.bot', 'eagle').name });
+  ok('the namespaced topic is a DIFFERENT address', collided !== namespacedId,
+    `${collided.slice(0, 12)}… vs ${namespacedId.slice(0, 12)}…`);
+  console.log(`     bare "axona.bot"        -> ${collided.slice(0, 16)}…`);
+  console.log(`     "portal.axona.bot"      -> ${namespacedId.slice(0, 16)}…`);
 }
 
 // ── 2. topic IDs ───────────────────────────────────────────────────
@@ -37,6 +64,9 @@ console.log('config — topic input, and why the limit is 10 MB\n');
   const id = 'a'.repeat(66);
   const r = parseTopicInput(id, 'eagle');
   ok('66 hex chars is treated as a topic ID', r.id === id && r.name === undefined);
+  // An id is already a resolved address; it cannot be namespaced, and typing 66
+  // hex characters is a deliberate act, not a slip. This is the escape hatch.
+  ok('…and is NOT namespaced', !String(r.id).startsWith(TOPIC_PREFIX));
   ok('an ID is lower-cased', parseTopicInput('A'.repeat(66), 'eagle').id === 'a'.repeat(66));
   ok('65 hex chars is REFUSED, not treated as a name', throws(() => parseTopicInput('a'.repeat(65), 'eagle')));
   ok('67 hex chars is REFUSED', throws(() => parseTopicInput('a'.repeat(67), 'eagle')));

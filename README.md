@@ -59,9 +59,22 @@ topic's **ID**, a 66-character string. That ID is the address. Give it to whoeve
 should receive your files; they paste it into their own portal and press Add. Both
 of you are now on the same topic.
 
-A name and an ID are two ways of saying the same thing: `design-team` in region
-`eagle` always derives the same ID, for everyone. Sharing the name works just as
-well as sharing the ID, as long as you both use the same region.
+A name and an ID are two ways of saying the same thing: `portal.design-team` in
+region `eagle` always derives the same ID, for everyone. Sharing the name works
+just as well as sharing the ID, as long as you both use the same region.
+
+**Every name you type goes under `portal.`** — type `design-team`, get
+`portal.design-team`. A topic name is a *global* address, and the obvious name for
+a thing is the name someone else already used: typing `axona.bot` here once derived
+exactly the address a chat channel uses by that name, which is one plausible word
+away from publishing a few hundred file chunks into somebody's conversation.
+Nothing was broken and nothing warned — it is one flat namespace and both sides
+addressed it correctly. The prefix makes that collision impossible rather than
+unlikely, and it is shown in full so the address you share is the address you see.
+
+A pasted 66-character topic **ID** is exempt: an ID is already a resolved address,
+and typing 66 hex characters is not a slip. That's the escape hatch when you really
+do mean one specific topic.
 
 **Send.** Select a topic, drop a file. Up to 10 MB.
 
