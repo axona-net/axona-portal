@@ -33,22 +33,41 @@
       "preload/**",
       "renderer/**",
       "src/**",
-      "package.json"
+      "package.json",
+      "!build${/*}"
     ],
     "asarUnpack": [
       "**/node_modules/node-datachannel/**"
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
       "identity": null
     },
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "linux": {
       "category": "Utility",
-      "target": ["AppImage"]
-    }
+      "target": [
+        "AppImage"
+      ]
+    },
+    "afterPack": "build/afterPack.cjs"
   }
 }
