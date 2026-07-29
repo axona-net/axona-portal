@@ -19,5 +19,10 @@
   "engines": {
     "node": ">=20"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "electron": "^43.2.0",
+    "electron-builder": "^26.15.3"
+  }
 }

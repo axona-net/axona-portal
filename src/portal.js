@@ -4,29 +4,38 @@
 // Shape of the thing:
 //
 //   connect()  one peer on the bridge, ephemeral node identity (I-ID)
-//   watch()    one persistent subscription per topic, each with its own
-//              reassembler, so a topic is a STREAM of files over time
-//   send()     chunk + publish + verify, via @axona/protocol/std/chunk
+//   watch()    one standing subscription per topic, listening for POINTERS
+//   send()     bytes to their own hash topic, a pointer to the shared one
 //
-// Why a persistent reassembler per topic rather than receiveChunkedBytes():
-// that helper is one-shot — it subscribes, waits for ONE file, and resolves or
-// times out. The portal is a standing inbox: it must catch every file that ever
-// arrives on a watched topic, including several in flight at once. createReassembler
-// is built for exactly that (it keys by fileId and fires once per completed file),
-// so the portal holds one live subscription per topic and lets the reassembler
-// demultiplex.
+// ─── WHY POINTERS AND NOT CHUNKS ──────────────────────────────────────
+// The first version published a file's chunks straight onto the shared topic
+// and reassembled them there. That works for one file and quietly breaks on the
+// second: a topic's replay cache holds ~1024 messages and a 10 MB file is 977 of
+// them, so the next transfer EVICTS the previous one and a later subscriber can
+// no longer reassemble it. Nothing errors; the file is simply not there.
+//
+// So a file's bytes now go to a topic derived from their own sha256 and only a
+// few hundred bytes of pointer land on the shared topic. The shared topic
+// becomes an index — thousands of entries before it is anywhere near full — and
+// the hash is both the address and the integrity check.
+//
+// This is also the wire format the MCP file tools speak (axona-relay/src/
+// file-transfer.js implements the same manifest v1 independently). An agent and
+// a human portal can only exchange a file because BOTH sides go through
+// transfer/; publishing chunks here would silently talk past the agent.
 //
 // Files are written as they complete. Nothing is auto-opened, ever — the user
 // clicks, and launch.js decides whether that click is safe to honour.
 // =====================================================================
 
 import { connect, KERNEL_VERSION, resolveRegion, regionCenter, deriveTopicId } from '@axona/protocol';
-import { createReassembler, publishChunkedBytes } from '@axona/protocol/std/chunk.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { basename } from 'node:path';
 import { uniquePath } from './paths.js';
 import { MAX_FILE_BYTES } from './config.js';
+import { sendFile, watchPointers, fetchBytes } from './transfer/index.js';
+import { loadReceived, saveReceived } from './received.js';
 
 export { KERNEL_VERSION };
 
@@ -39,8 +48,10 @@ export class Portal {
     this.emit  = emit;
     this.peer  = null;
     this.author = null;
-    this.subs  = new Map();      // topicKey -> { handle, reassembler, topic }
+    this.subs  = new Map();      // topicKey -> { handle, topic }
     this.files = [];             // newest-first log of transfers, both directions
+    this.received = loadReceived();   // sha256 -> {name, at}; survives restarts
+    this.fetching = new Set();        // sha256 currently in flight
     this.status = { connected: false, peers: 0, kernel: KERNEL_VERSION, bridge: cfg.bridge, error: null };
   }
 
@@ -123,50 +134,81 @@ export class Portal {
     this.pushState();
   }
 
-  /** One standing subscription + one multi-file reassembler for this topic. */
+  /** One standing subscription per topic, listening for pointers. */
   async _watch(topic) {
     const key = Portal.key(topic);
     if (this.subs.has(key)) return;
-    const descriptor = this._descriptor(topic);
-    const label = topic.name;
 
-    const reassembler = createReassembler(
-      (file) => { this._onFile(topic, file).catch(e =>
-        this.emit({ type: 'log', text: `save failed: ${e.message}`, level: 'error' })); },
-      { onProgress: ({ id, have, total }) => {
-          if (total) this.emit({ type: 'progress', dir: 'in', topic: label, id, have, total });
-        } },
-    );
-
-    const handle = await this.peer.sub(descriptor, (env) => {
-      if (!env || env.deleted) return;
-      // Our own publishes come back through the mesh. Reassembling and re-saving
-      // a file this machine just sent would put a duplicate in the folder.
+    const handle = await watchPointers(this.peer, this._descriptor(topic), (pointer) => {
+      // Our own announcements come back through the mesh. Fetching and saving a
+      // file this machine just sent would put a duplicate in the folder.
       // `authorId` IS `signerPubkey` on the wire (identity/index.js:191).
-      if (this.author && env.signerPubkey && env.signerPubkey === this.author.authorId) return;
-      reassembler.accept(env.message);
+      if (this.author && pointer.signer && pointer.signer === this.author.authorId) return;
+      this._onPointer(topic, pointer).catch(e =>
+        this.emit({ type: 'log', level: 'error', text: `${pointer.filename}: ${e.message}` }));
     }, { since: 'all' });
 
-    this.subs.set(key, { handle, reassembler, topic });
-    this.emit({ type: 'log', text: `watching ${label}` });
+    this.subs.set(key, { handle, topic });
+    this.emit({ type: 'log', text: `watching ${topic.name}` });
   }
 
   // ── receive ────────────────────────────────────────────────────────
-  async _onFile(topic, file) {
-    if (file.bytes.length > MAX_FILE_BYTES) {
+  /**
+   * A pointer arrived. Decide whether to fetch it, then fetch-verify-save.
+   *
+   * The portal auto-fetches because a human chose this topic and is watching
+   * the window — that is the difference between this app and the MCP tools,
+   * which are pull-only precisely because no human is watching there.
+   *
+   * Every refusal below happens BEFORE any bytes are requested. Declining to
+   * start a 977-chunk download is the cheap place to say no; discovering the
+   * problem after reassembly is not.
+   */
+  async _onPointer(topic, pointer) {
+    const { sha256, filename, bytes } = pointer;
+
+    if (this.received.has(sha256)) return;      // already on disk from an earlier run
+    if (this.fetching.has(sha256)) return;      // two topics can announce one file
+    if (bytes > MAX_FILE_BYTES) {
       this.emit({ type: 'log', level: 'warn',
-        text: `dropped ${file.name}: ${(file.bytes.length / 1048576).toFixed(1)} MB exceeds the 10 MB limit` });
+        text: `ignored ${filename}: announced as ${(bytes / 1048576).toFixed(1)} MB, over the 10 MB limit` });
       return;
     }
+
+    this.fetching.add(sha256);
+    this.emit({ type: 'log', text: `fetching ${filename} (${(bytes / 1024).toFixed(0)} KB)…` });
+    try {
+      const file = await fetchBytes(this.peer, {
+        sha256, region: topic.region ?? this.cfg.region,
+        onProgress: ({ have, total }) => {
+          if (total) this.emit({ type: 'progress', dir: 'in', topic: topic.name, id: sha256, have, total });
+        },
+      });
+      // fetchBytes has already recomputed the hash and refused a mismatch, so
+      // what lands here is the file that was named — verified by arithmetic,
+      // not by trusting the sender, the pointer, or the network.
+      await this._save(topic, file, pointer);
+    } finally {
+      this.fetching.delete(sha256);
+    }
+  }
+
+  async _save(topic, file, pointer) {
     await mkdir(this.cfg.saveDir, { recursive: true });
-    const path = uniquePath(this.cfg.saveDir, file.name, existsSync);
+    // The filename comes from the pointer, which came off a public topic: it is
+    // hostile text until paths.js has reduced it to one harmless component.
+    const path = uniquePath(this.cfg.saveDir, pointer.filename || file.filename, existsSync);
     // 0600: a file that arrived from the network is readable by this user only,
     // and never carries an execute bit no matter what the sender named it.
     await writeFile(path, file.bytes, { mode: 0o600 });
 
+    this.received.set(file.sha256, { name: basename(path), at: now() });
+    saveReceived(this.received);
+
     const rec = {
       dir: 'in', name: basename(path), path, size: file.bytes.length,
       topic: topic.name, at: now(), mime: file.mime ?? 'application/octet-stream',
+      sha256: file.sha256,
     };
     this.files.unshift(rec);
     this.files = this.files.slice(0, 200);
@@ -186,20 +228,31 @@ export class Portal {
     const label = s.topic.name;
     this.emit({ type: 'log', text: `sending ${name} to ${label}…` });
 
-    const r = await publishChunkedBytes(this.peer, bytes, {
-      topic: this._descriptor(s.topic),
+    const r = await sendFile(this.peer, {
+      bytes, filename: name, mime,
+      shareTopic: this._descriptor(s.topic),
+      region: s.topic.region ?? this.cfg.region,
       signWith: this.author,
-      name, mime,
+      onProgress: ({ have, total }) => {
+        if (total) this.emit({ type: 'progress', dir: 'out', topic: label, id: name, have, total });
+      },
     });
+
+    // Remember what we sent. Our own pointer comes back through the mesh and is
+    // filtered by signer, but a SECOND portal signed-in as the same author (or a
+    // re-send after a restart, when the author is fresh) would otherwise fetch
+    // back a file this machine already has.
+    this.received.set(r.sha256, { name, at: now() });
+    saveReceived(this.received);
 
     const rec = {
       dir: 'out', name, size: bytes.length, topic: label, at: now(), mime,
-      chunks: r.n, repaired: r.repaired,
+      chunks: r.chunks, repaired: r.repaired, sha256: r.sha256,
     };
     this.files.unshift(rec);
     this.files = this.files.slice(0, 200);
     this.emit({ type: 'log',
-      text: `sent ${name} — ${r.n} chunks${r.repaired ? `, ${r.repaired} repaired` : ''}` });
+      text: `sent ${name} — ${r.chunks} chunks${r.repaired ? `, ${r.repaired} repaired` : ''}` });
     this.emit({ type: 'file', file: rec });
     this.pushState();
     return rec;
