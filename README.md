@@ -20,6 +20,36 @@ npm start
 
 A browser window opens at `http://127.0.0.1:7777`. That's the app.
 
+## Starting it without a terminal
+
+**macOS — double-click `Axona Portal.command`.** It finds Node for you (a
+double-clicked app does *not* inherit your shell's `PATH`, which is why most
+Node launchers fail), installs dependencies on first run, and starts the portal.
+The Terminal window it opens is both the log and the off switch: close it, or
+press `^C`, and the portal leaves the mesh cleanly. Double-clicking again while
+it's running just re-opens the browser window rather than colliding on the port.
+
+**Windows — double-click `Axona Portal.cmd`.** Same idea.
+
+**For a Dock icon with no Terminal window**, build a proper app bundle once:
+
+```bash
+bash scripts/make-macos-app.sh            # or: … ~/Applications
+```
+
+> ⚠️ **The bundle cannot live under `~/Documents`, `~/Desktop` or `~/Downloads`.**
+> macOS privacy protection (TCC) denies an unsigned app access to those folders,
+> so it fails at launch with `Operation not permitted`. Terminal already holds
+> that permission, which is exactly why `Axona Portal.command` works where the
+> bundle does not. If your checkout is in a protected folder, either use the
+> `.command`, or move the checkout somewhere like `~/code/axona-portal` and
+> rebuild. The bundle detects this case and says so in a dialog rather than
+> failing silently.
+>
+> It is not code-signed either — the first launch needs right-click → Open once.
+> Signing would require a paid Developer ID, which a "clone the repo and run it"
+> app should not demand.
+
 ---
 
 ## Using it
