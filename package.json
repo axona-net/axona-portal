@@ -1,15 +1,15 @@
 {
   "name": "axona-portal",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": false,
-  "description": "Drag a file in, it arrives on someone else's desktop. A small Axona pub/sub file portal that runs on your own machine.",
+  "description": "Drag a file in, it arrives on someone else's desktop. A small Axona file portal that runs on your own machine.",
   "type": "module",
-  "bin": {
-    "axona-portal": "./src/index.js"
-  },
+  "main": "main/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "test": "node test/run.mjs"
+    "start": "electron .",
+    "test": "node test/run.mjs",
+    "dist": "electron-builder",
+    "dist:dir": "electron-builder --dir"
   },
   "dependencies": {
     "@axona/protocol": "github:axona-net/axona-protocol#v4.49.0",
@@ -24,5 +24,31 @@
     "@electron/rebuild": "^4.2.0",
     "electron": "^43.2.0",
     "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "net.axona.portal",
+    "productName": "axona.portal",
+    "files": [
+      "main/**",
+      "preload/**",
+      "renderer/**",
+      "src/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/node-datachannel/**"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "identity": null
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }]
+    },
+    "linux": {
+      "category": "Utility",
+      "target": ["AppImage"]
+    }
   }
 }

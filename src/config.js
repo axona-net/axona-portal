@@ -29,7 +29,7 @@ export const DEFAULTS = Object.freeze({
   region:  'eagle',
   saveDir: join(homedir(), 'Axona Portal'),
   topics:  [],            // [{ id, name, region, addedAt }]
-  port:    7777,
+  seenFirstRun: false,    // the unsigned-build explainer, shown once
 });
 
 /**
@@ -82,7 +82,6 @@ export function loadConfig() {
   const cfg = { ...DEFAULTS, ...stored };
   cfg.topics  = Array.isArray(cfg.topics) ? cfg.topics.filter(isValidTopic) : [];
   cfg.saveDir = resolve(String(cfg.saveDir || DEFAULTS.saveDir));
-  cfg.port    = Number.isInteger(cfg.port) ? cfg.port : DEFAULTS.port;
 
   // Migrate topics saved before the namespace existed. This CHANGES the
   // address — `axona.bot` and `portal.axona.bot` are different topics — so it
@@ -105,9 +104,13 @@ export function loadConfig() {
 
 export function saveConfig(cfg) {
   ensureDir(CONFIG_DIR);
+  // An explicit allow-list, so a stray field someone hangs off cfg at runtime
+  // never silently becomes persisted state. Which does mean a new setting has
+  // to be added HERE as well as to DEFAULTS — seenFirstRun was written, read
+  // back as undefined, and re-showed the first-run dialog on every launch.
   const out = {
     bridge: cfg.bridge, region: cfg.region, saveDir: cfg.saveDir,
-    port: cfg.port, topics: cfg.topics,
+    topics: cfg.topics, seenFirstRun: !!cfg.seenFirstRun,
   };
   writeFileSync(CONFIG_FILE, JSON.stringify(out, null, 2) + '\n', { mode: 0o600 });
 }

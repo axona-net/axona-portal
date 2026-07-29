@@ -2,10 +2,10 @@
 
 Drag a file in. It arrives on someone else's desktop.
 
-A small Node app that runs on your own machine. You give it one or more **topics**;
-anything you drop is chunked, signed and published to the topic you picked. Anything
-anyone else publishes to a topic you watch is reassembled, saved to a folder, and
-listed. Click it to open it.
+A small desktop app that runs on your own machine. You give it one or more **topics**;
+anything you drop is chunked, signed and published. Anything anyone else publishes to
+a topic you watch is fetched, verified, saved to a folder, and listed. Click it to
+open it.
 
 No account, no server of ours holding your files, no upload page. The bridge is used
 to find peers and then gets out of the way — once the mesh forms, transfers go
@@ -18,37 +18,25 @@ npm install
 npm start
 ```
 
-A browser window opens at `http://127.0.0.1:7777`. That's the app.
-
-## Starting it without a terminal
-
-**macOS — double-click `Axona Portal.command`.** It finds Node for you (a
-double-clicked app does *not* inherit your shell's `PATH`, which is why most
-Node launchers fail), installs dependencies on first run, and starts the portal.
-The Terminal window it opens is both the log and the off switch: close it, or
-press `^C`, and the portal leaves the mesh cleanly. Double-clicking again while
-it's running just re-opens the browser window rather than colliding on the port.
-
-**Windows — double-click `Axona Portal.cmd`.** Same idea.
-
-**For a Dock icon with no Terminal window**, build a proper app bundle once:
+That's the app. To build an installer for your platform:
 
 ```bash
-bash scripts/make-macos-app.sh            # or: … ~/Applications
+npm run dist
 ```
 
-> ⚠️ **The bundle cannot live under `~/Documents`, `~/Desktop` or `~/Downloads`.**
-> macOS privacy protection (TCC) denies an unsigned app access to those folders,
-> so it fails at launch with `Operation not permitted`. Terminal already holds
-> that permission, which is exactly why `Axona Portal.command` works where the
-> bundle does not. If your checkout is in a protected folder, either use the
-> `.command`, or move the checkout somewhere like `~/code/axona-portal` and
-> rebuild. The bundle detects this case and says so in a dialog rather than
-> failing silently.
->
-> It is not code-signed either — the first launch needs right-click → Open once.
-> Signing would require a paid Developer ID, which a "clone the repo and run it"
-> app should not demand.
+`dmg` on macOS, `nsis` on Windows, `AppImage` on Linux, in `dist/`.
+
+## About unsigned builds
+
+The app carries no Developer ID, so macOS and Windows will say its publisher is
+unknown. **That warning is accurate** — and it is the same one you would get from a
+build you made yourself. On macOS the first launch needs a right-click → Open.
+
+Signing costs $99/yr and, more to the point, attaches a legal identity to the binary.
+For a project whose whole claim is a network with no owner, that is a decision worth
+taking deliberately rather than by invoice, so for now the answer is: build it
+yourself, or accept the dialog. Received files are saved to `~/Axona Portal`, which is
+outside the folders macOS protects, so the app never needs a permission it can't get.
 
 ---
 
@@ -82,6 +70,34 @@ do mean one specific topic.
 list. Click to open with your default app; right-click to reveal it in the folder
 instead.
 
+**Sharing with an agent.** The MCP file tools in
+[`axona-relay`](https://github.com/axona-net/axona-relay) speak the same format on
+the same `portal.` namespace, so an agent can list and fetch what you drop here, and
+you receive what it sends. The agent side is deliberately **pull-only** — it never
+writes a file to disk without being asked for that specific one by hash.
+
+---
+
+## How a file is addressed
+
+A file's bytes go to a topic derived from **their own sha256**, and only a small
+pointer lands on the topic you share:
+
+```
+bytes   ──chunked──>  portal.f.<sha256>       its own topic, ~977 messages for 10 MB
+pointer ─────────->   portal.design-team      a few hundred bytes
+```
+
+This is not decoration. A topic's replay cache holds about 1024 messages and a 10 MB
+file is 977 of them, so putting bytes directly on a shared topic means the *second*
+file silently evicts the first — no error, the file is just not there any more. With
+pointers the shared topic is an index and holds thousands of entries.
+
+The hash is both the address and the integrity check. A receiver recomputes it over
+whatever reassembled and **refuses to write on a mismatch**, so it does not have to
+trust the sender, the pointer, or the network — only arithmetic. Identical content
+sent twice is one file, and a re-send costs nothing.
+
 ---
 
 ## What to know before you share something
@@ -108,18 +124,22 @@ component, stripped of control characters, never allowed to escape the save fold
 That logic lives in [`src/paths.js`](src/paths.js) and is the app's whole trust
 boundary; [`test/smoke_paths.mjs`](test/smoke_paths.mjs) asserts it.
 
-**The local server is bound to `127.0.0.1`** and gated by a random token, regenerated
-each run and printed in the URL. Another site open in your browser cannot drive it.
+**There is no listening socket.** Earlier versions ran a localhost HTTP server for a
+browser UI, defended with an Origin check and a per-run token. Under Electron the
+window talks to the app over IPC, so that whole class — "another page in your browser
+could drive this" — is gone rather than guarded against. The renderer runs sandboxed
+with no Node integration and can reach exactly the seven functions in
+[`preload/index.cjs`](preload/index.cjs).
 
 ---
 
 ## Why 10 MB
 
-Not a preference — the protocol's shape. `std/chunk` splits a file into ~10.7 KB
-messages, and a topic's replay cache holds about 1024 of them. A transfer bigger
-than that cache cannot be reassembled by anyone who subscribes *after* it was sent:
-the mesh no longer holds every piece. 10 MB is 977 messages, comfortably inside the
-ceiling. The true wall is around 10.4 MB.
+Not a preference — the protocol's shape, as above. `std/chunk` splits a file into
+~10.7 KB messages and the replay cache holds about 1024. Content addressing means a
+shared topic no longer fills up, but a *single* file still has to fit in one topic's
+cache to stay reassemblable by a later subscriber. 10 MB is 977 messages; the true
+wall is around 10.4 MB.
 
 `test/smoke_config.mjs` checks the limit against the kernel's own chunk size, so if
 the kernel ever changes it, the test fails before a user does.
@@ -128,44 +148,54 @@ the kernel ever changes it, the test fails before a user does.
 
 ## Configuration
 
-`~/.axona-portal/config.json` — topics, save folder, bridge, port. Nothing
-key-shaped is stored there.
+`~/.axona-portal/config.json` — topics, save folder, bridge, region. Nothing
+key-shaped is stored there; the transport identity is minted fresh every run and is
+never written to disk.
+
+`~/.axona-portal/received.json` — a ledger of sha256s already saved, so a restart
+does not re-download and re-save the whole backlog of every topic you watch. Delete a
+received file and the portal will *not* fetch it again; remove its entry here if you
+want it back.
 
 | Variable | Default | |
 |---|---|---|
-| `AXONA_PORT` | `7777` | if the port is taken |
 | `AXONA_BRIDGE` | `wss://bridge.axona.net` | e.g. `wss://testnet.axona.net` |
-| `AXONA_NO_OPEN` | — | set to skip launching a browser |
 
 ---
 
 ## How it fits together
 
 ```
-ui/            plain HTML/CSS/JS, no build step, no framework
-src/index.js   start config -> peer -> server -> browser
-src/portal.js  one peer; one persistent subscription + reassembler PER TOPIC
-src/server.js  127.0.0.1 static + upload + state socket
-src/paths.js   the trust boundary (remote filename -> local path)
-src/launch.js  hand a file to the OS, carefully
+main/index.js     app lifecycle, the window, the peer, single-instance lock
+main/ipc.js       the ONLY main<->renderer surface — the trust boundary
+preload/index.cjs contextBridge; seven functions, nothing else
+renderer/         plain HTML/CSS/JS, no build step, no framework, sandboxed
+src/portal.js     one peer; one standing pointer subscription per topic
+src/transfer/     content addressing — sendFile / watchPointers / fetchBytes
+src/paths.js      remote filename -> local path
+src/launch.js     hand a file to the OS, carefully
+src/received.js   what has already been saved
 ```
 
-A topic is a *stream* of files over time, so each watched topic keeps a standing
-subscription and its own reassembler rather than waiting for one file and stopping.
+`src/transfer/` implements manifest v1, which `axona-relay/src/file-transfer.js`
+implements **separately**. The schema is the contract, not the code — they are not one
+package yet because the format is still young. Both sides are fenced against drift,
+and `scripts/live-app-interop.mjs` proves it over the production network by making a
+real `Portal` trade files with the agent implementation.
 
-Built on [`@axona/protocol`](https://github.com/axona-net/axona-protocol) — the
-`std/chunk` helpers do the chunking, publish-verify-repair, and reassembly.
+Built on [`@axona/protocol`](https://github.com/axona-net/axona-protocol).
 
 ```bash
-npm test    # trust boundary, topic parsing, size ceiling, kernel pin
+npm test                              # trust boundary, manifest, IPC surface, kernel pin
+node scripts/live-app-interop.mjs     # app <-> agent, over the real network
 ```
 
 ---
 
 ## Anyone can run this
 
-There is no build and no signing step. Clone, `npm install`, `npm start`. The only
-native dependency is `node-datachannel`, which ships prebuilt binaries for macOS,
-Linux and Windows. Node 20 or newer.
+Clone, `npm install`, `npm start`. The only native dependency is `node-datachannel`,
+which ships prebuilt N-API binaries — ABI-stable across Node and Electron, so there is
+no rebuild step. Node 20 or newer.
 
 MIT.

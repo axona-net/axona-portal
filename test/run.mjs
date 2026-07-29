@@ -29,7 +29,7 @@ const FENCES = [
   'smoke_paths.mjs',           // the trust boundary: hostile filename -> local path
   'smoke_config.mjs',          // topic parsing, the portal. namespace, size ceiling
   'smoke_manifest.mjs',        // content addressing + pointer validation
-  'smoke_token_substitution.mjs',
+  'smoke_ipc_surface.mjs',     // main<->renderer channels + the sandbox settings
 ];
 
 let ran = 0, failed = 0;

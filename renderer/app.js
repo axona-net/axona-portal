@@ -1,33 +1,37 @@
 // =====================================================================
-// app.js — the UI. Renders server state; owns no truth of its own.
+// app.js — the UI. Renders main-process state; owns no truth of its own.
 //
 // The only local state is which topic is selected, because that is a property
 // of this window rather than of the portal. Everything else (topics, files,
 // connection) is whatever the last {type:'state'} said. One render function,
 // called on every update — no incremental DOM patching to drift out of sync.
+//
+// This page runs sandboxed with no Node integration: `window.portal` is the
+// entire world it can reach, and every function on it is listed in
+// preload/index.cjs. There is no socket to reconnect and no token to carry —
+// under Electron the channel to main cannot drop while the window is alive.
 // =====================================================================
 
-const TOKEN = window.__TOKEN__;
 const $ = (id) => document.getElementById(id);
 
 let state = { status:{}, topics:[], files:[], saveDir:'', maxBytes: 10*1024*1024 };
 let selected = null;
-let ws = null;
 
-// ── socket ──────────────────────────────────────────────────────────
-function connect() {
-  ws = new WebSocket(`ws://${location.host}/?t=${TOKEN}`);
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.type === 'state')  { state = m.state; render(); }
-    if (m.type === 'status') { state.status = m.status; renderStatus(); }
-    if (m.type === 'error')  toast(m.text, true);
-    if (m.type === 'file' && m.file.dir === 'in') toast(`Received ${m.file.name}`);
-    if (m.type === 'progress' && m.total) showBar(m.have / m.total);
-  };
-  ws.onclose = () => { setDot('off', 'portal stopped'); setTimeout(connect, 1500); };
+// ── events from main ────────────────────────────────────────────────
+window.portal.onEvent((m) => {
+  if (m.type === 'state')  { state = m.state; render(); }
+  if (m.type === 'status') { state.status = m.status; renderStatus(); }
+  if (m.type === 'error')  toast(m.text, true);
+  if (m.type === 'log' && m.level === 'error') toast(m.text, true);
+  if (m.type === 'file' && m.file.dir === 'in') toast(`Received ${m.file.name}`);
+  if (m.type === 'progress' && m.total) showBar(m.have / m.total);
+});
+
+/** Ask main to do something, and surface a refusal instead of swallowing it. */
+async function ask(fn) {
+  try { return await fn(); }
+  catch (e) { toast(e.message, true); return null; }
 }
-const send = (o) => ws?.readyState === 1 && ws.send(JSON.stringify(o));
 
 // ── render ──────────────────────────────────────────────────────────
 function renderStatus() {
@@ -69,7 +73,7 @@ function render() {
 
     const del = document.createElement('button');
     del.className = 'icon'; del.type = 'button'; del.textContent = '×'; del.title = 'Stop watching';
-    del.onclick = (e) => { e.stopPropagation(); send({ type:'removeTopic', key:t.key }); };
+    del.onclick = (e) => { e.stopPropagation(); ask(() => window.portal.removeTopic(t.key)); };
 
     li.append(name, tid, copy, del);
     return li;
@@ -99,8 +103,8 @@ function render() {
     name.textContent = f.name;
     if (f.path) {
       name.title = 'Open with the default app';
-      name.onclick = () => send({ type:'open', path:f.path });
-      name.oncontextmenu = (e) => { e.preventDefault(); send({ type:'reveal', path:f.path }); };
+      name.onclick = () => ask(() => window.portal.openFile(f.path));
+      name.oncontextmenu = (e) => { e.preventDefault(); ask(() => window.portal.revealFile(f.path)); };
     } else {
       name.title = 'Sent from this machine';
     }
@@ -129,14 +133,14 @@ async function upload(file) {
 
   showBar(0.05);
   try {
-    const res = await fetch(`/api/send?t=${TOKEN}&topic=${encodeURIComponent(selected)}`, {
-      method: 'POST',
-      headers: { 'content-type': file.type || 'application/octet-stream',
-                 'x-filename': encodeURIComponent(file.name) },
-      body: file,
+    // The page reads the bytes it was handed and passes them across; it never
+    // passes a PATH. Main therefore has nothing to containment-check on the way
+    // out, and the page cannot name a file the user did not drag in.
+    const buffer = await file.arrayBuffer();
+    await window.portal.sendFile({
+      topicKey: selected, name: file.name,
+      mime: file.type || 'application/octet-stream', buffer,
     });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(j.error ?? `upload failed (${res.status})`);
     toast(`Sent ${file.name}`);
   } catch (e) { toast(e.message, true); }
   finally { hideBar(); }
@@ -157,9 +161,9 @@ function toast(text, warn = false) {
 $('addForm').onsubmit = (e) => {
   e.preventDefault();
   const v = $('topicInput').value.trim();
-  if (v) { send({ type:'addTopic', value:v }); $('topicInput').value = ''; }
+  if (v) { ask(() => window.portal.addTopic(v)); $('topicInput').value = ''; }
 };
-$('revealFolder').onclick = () => send({ type:'revealFolder' });
+$('revealFolder').onclick = () => ask(() => window.portal.revealFolder());
 
 const drop = $('drop');
 drop.onclick = () => $('filePicker').click();
@@ -179,4 +183,6 @@ drop.addEventListener('drop', (e) => {
   if (f) upload(f);            // one at a time: each file is its own transfer
 });
 
-connect();
+
+// First paint. After this, everything arrives as an event.
+ask(() => window.portal.getState()).then((st) => { if (st) { state = st; render(); } });
