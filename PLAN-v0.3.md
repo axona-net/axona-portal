@@ -2,6 +2,14 @@
 
 *Written 2026-07-29. Proposal only; nothing here is built.*
 
+> **STATUS — superseded in part, 2026-07-29.** Steps 0–4 are done and
+> shipped in v0.4.0: kernel pin, #410 content addressing, `src/transfer/`,
+> the MCP tools (in axona-relay), and the Electron shell. The status table
+> below is a snapshot of the day this was written and is no longer true —
+> in particular the repo IS public at `axona-net/axona-portal`. Read the
+> README for what the app is now; read this for why it was built that way.
+> Steps 5 and 6 are still open.
+
 ## Where we actually are
 
 | | state |
