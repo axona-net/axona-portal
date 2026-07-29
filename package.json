@@ -1,6 +1,6 @@
 {
   "name": "axona-portal",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": false,
   "description": "Drag a file in, it arrives on someone else's desktop. A small Axona pub/sub file portal that runs on your own machine.",
   "type": "module",
@@ -12,7 +12,7 @@
     "test": "node test/smoke_paths.mjs && node test/smoke_config.mjs && node test/smoke_token_substitution.mjs && node test/check_kernel_pin.mjs"
   },
   "dependencies": {
-    "@axona/protocol": "github:axona-net/axona-protocol#v4.43.0",
+    "@axona/protocol": "github:axona-net/axona-protocol#v4.49.0",
     "node-datachannel": "^0.32.3",
     "ws": "^8.18.0"
   },
