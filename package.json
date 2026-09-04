@@ -1,6 +1,6 @@
 {
   "name": "axona-portal",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": false,
   "description": "Drag a file in, it arrives on someone else's desktop. A small Axona file portal that runs on your own machine.",
   "type": "module",
@@ -12,7 +12,7 @@
     "dist:dir": "electron-builder --dir"
   },
   "dependencies": {
-    "@axona/protocol": "github:axona-net/axona-protocol#v4.59.2",
+    "@axona/protocol": "github:axona-net/axona-protocol#v4.75.0",
     "node-datachannel": "^0.32.3",
     "ws": "^8.18.0"
   },
