@@ -1,6 +1,6 @@
 {
   "name": "axona-portal",
-  "version": "0.36.0",
+  "version": "0.37.0",
   "private": false,
   "description": "Drag a file in, it arrives on someone else's desktop. A small Axona file portal that runs on your own machine.",
   "type": "module",

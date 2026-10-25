@@ -30,6 +30,7 @@ const FENCES = [
   'smoke_config.mjs',          // topic parsing, the portal. namespace, size ceiling
   'smoke_manifest.mjs',        // content addressing + pointer validation
   'smoke_ipc_surface.mjs',     // main<->renderer channels + the sandbox settings
+  'smoke_connect_opts.mjs',    // every connect() `ready:` key is one the kernel reads
 ];
 
 let ran = 0, failed = 0;

@@ -68,7 +68,7 @@ await portal.addTopic({ name: SHARE, region: REGION });
 // ── the agent's side: the code the MCP tools run ───────────────────────
 const center = regionCenter(resolveRegion(REGION));
 const a = await connect({ bridge: BRIDGE, location: { lat: center.lat, lng: center.lng },
-                          author: true, ready: { timeoutSec: 45 } });
+                          author: true, ready: { timeoutMs: 45_000 } });
 const agent = { peer: a.peer ?? a, author: a.author ?? null };
 console.log('agent:  connected\n');
 

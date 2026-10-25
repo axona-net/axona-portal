@@ -68,7 +68,10 @@ export class Portal {
       bridge:   this.cfg.bridge,
       location: { lat: center.lat, lng: center.lng },
       author:   true,
-      ready:    { timeoutSec: 45 },
+      // The kernel reads `timeoutMs` only (AxonaPeer.ready, connect.js). The
+      // old `timeoutSec: 45` was ignored, so the portal waited the 10 s default
+      // and connect() threw on a slow room (Vega 61f9de5a, 2026-10-24).
+      ready:    { timeoutMs: 45_000 },
     });
     this.peer   = res.peer ?? res;
     this.author = res.author ?? null;

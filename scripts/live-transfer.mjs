@@ -15,7 +15,7 @@ const SHARE  = { region: REGION, name: `portal.livetest.${Date.now()}` };
 const center = regionCenter(resolveRegion(REGION));
 const dial = async (label) => {
   const r = await connect({ bridge: BRIDGE, location: { lat: center.lat, lng: center.lng },
-                            author: true, ready: { timeoutSec: 45 } });
+                            author: true, ready: { timeoutMs: 45_000 } });
   console.log(`  ${label} connected`);
   return { peer: r.peer ?? r, author: r.author ?? null };
 };
